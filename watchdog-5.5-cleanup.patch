@@ -1,0 +1,419 @@
+diff -ur watchdog-5.5.orig/include/extern.h watchdog-5.5.cleanup/include/extern.h
+--- watchdog-5.5.orig/include/extern.h	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/include/extern.h	2009-03-13 10:34:52.000000000 +0000
+@@ -48,8 +48,12 @@
+ #define MAXICMPLEN      76
+ #define MAXPACKET       (65536 - 60 - 8)        /* max packet size */
+ 
++#ifndef TRUE
+ #define TRUE  1
++#endif
++#ifndef FALSE
+ #define FALSE 0
++#endif
+ 
+ #define TS_SIZE	12
+ 
+diff -ur watchdog-5.5.orig/src/iface.c watchdog-5.5.cleanup/src/iface.c
+--- watchdog-5.5.orig/src/iface.c	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/src/iface.c	2009-03-13 10:21:43.000000000 +0000
+@@ -66,7 +66,7 @@
+ #if USE_SYSLOG
+ 			/* do verbose logging */
+ 			if (verbose && logtick && ticker == 1)
+-		            syslog(LOG_INFO, "device %s received %u bytes", dev->name, bytes);
++		            syslog(LOG_INFO, "device %s received %lu bytes", dev->name, bytes);
+ #endif   
+ 
+ 			if (dev->parameter.iface.bytes == bytes) {
+diff -ur watchdog-5.5.orig/src/keep_alive.c watchdog-5.5.cleanup/src/keep_alive.c
+--- watchdog-5.5.orig/src/keep_alive.c	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/src/keep_alive.c	2009-03-13 10:40:32.000000000 +0000
+@@ -20,7 +20,6 @@
+     struct tm *tm;
+     char tbuf[TS_SIZE + 1];
+     char tbufw[TS_SIZE + 1];
+-    int i;
+ 
+     if (hb == NULL)
+ 	    return (ENOERR);
+@@ -41,7 +40,8 @@
+         // success
+         if (nrts < hbstamps) 
+             nrts++;
+-        lastts = ++lastts % hbstamps;
++        ++lastts;
++        lastts = lastts % hbstamps;
+         
+         // write the buffer to the file
+         rewind(hb);
+diff -ur watchdog-5.5.orig/src/lomount.c watchdog-5.5.cleanup/src/lomount.c
+--- watchdog-5.5.orig/src/lomount.c	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/src/lomount.c	2009-03-13 10:24:55.000000000 +0000
+@@ -195,13 +195,13 @@
+     break;
+   case LO_CRYPT_XOR:
+     pass = getpass ("Password: ");
+-    strncpy (loopinfo.lo_encrypt_key, pass, LO_KEY_SIZE);
++    strncpy ((char *) loopinfo.lo_encrypt_key, pass, LO_KEY_SIZE);
+     loopinfo.lo_encrypt_key[LO_KEY_SIZE - 1] = 0;
+-    loopinfo.lo_encrypt_key_size = strlen (loopinfo.lo_encrypt_key);
++    loopinfo.lo_encrypt_key_size = (int) strlen ((char *) loopinfo.lo_encrypt_key);
+     break;
+   case LO_CRYPT_DES:
+     pass = getpass ("Password: ");
+-    strncpy (loopinfo.lo_encrypt_key, pass, 8);
++    strncpy ((char *) loopinfo.lo_encrypt_key, pass, 8);
+     loopinfo.lo_encrypt_key[8] = 0;
+     loopinfo.lo_encrypt_key_size = 8;
+     pass = getpass ("Init (up to 16 hex digits): ");
+diff -ur watchdog-5.5.orig/src/mntent.c watchdog-5.5.cleanup/src/mntent.c
+--- watchdog-5.5.orig/src/mntent.c	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/src/mntent.c	2009-03-13 10:25:47.000000000 +0000
+@@ -21,11 +21,11 @@
+ static char need_escaping[] = { ' ', '\t', '\n', '\\' };
+ 
+ static char *
+-mangle(unsigned char *s) {
++mangle(const char *s) {
+ 	char *ss, *sp;
+ 	int n;
+ 
+-	n = strlen(s);
++	n = (int) strlen(s);
+ 	ss = sp = xmalloc(4*n+1);
+ 	while(1) {
+ 		for (n = 0; n < sizeof(need_escaping); n++) {
+diff -ur watchdog-5.5.orig/src/net.c watchdog-5.5.cleanup/src/net.c
+--- watchdog-5.5.orig/src/net.c	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/src/net.c	2009-03-13 10:28:09.000000000 +0000
+@@ -57,7 +57,9 @@
+     for (i = 0; i < count; i++) {
+ 
+ 	struct sockaddr_in from;
+-	int fromlen, fdmask, j;
++	int fdmask, j;
++	int *fdmask_p;
++	socklen_t fromlen;
+ 	struct timeval timeout, dtimeout;
+ 	struct icmphdr *icp = (struct icmphdr *) outpack;
+ 
+@@ -119,10 +121,11 @@
+                    break;
+ #if USE_SYSLOG
+                if (verbose && logtick && ticker == 1)
+-                   syslog(LOG_ERR, "ping select timeout = %d seconds and %d useconds\n", dtimeout.tv_sec, dtimeout.tv_usec);
++                   syslog(LOG_ERR, "ping select timeout = %ld seconds and %ld useconds\n", dtimeout.tv_sec, dtimeout.tv_usec);
+ #endif /* USE_SYSLOG */
++	           fdmask_p = &fdmask;
+ 
+-            	   if (select(sock_fp + 1, (fd_set *) & fdmask, (fd_set *) NULL,
++            	   if (select(sock_fp + 1, (fd_set *) fdmask_p, (fd_set *) NULL,
+                       (fd_set *) NULL, &dtimeout) >= 1) {
+ 
+                    /* read reply */
+diff -ur watchdog-5.5.orig/src/nfsmount.c watchdog-5.5.cleanup/src/nfsmount.c
+--- watchdog-5.5.orig/src/nfsmount.c	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/src/nfsmount.c	2009-03-13 10:28:33.000000000 +0000
+@@ -48,6 +48,7 @@
+ #include <sys/stat.h>
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
++#include <time.h>
+ 
+ #include "sundries.h"
+ #include "nfsmount.h"
+diff -ur watchdog-5.5.orig/src/nfsmount_xdr.c watchdog-5.5.cleanup/src/nfsmount_xdr.c
+--- watchdog-5.5.orig/src/nfsmount_xdr.c	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/src/nfsmount_xdr.c	2009-03-13 10:29:31.000000000 +0000
+@@ -43,8 +43,6 @@
+ bool_t
+ xdr_fhandle (XDR *xdrs, fhandle objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_opaque (xdrs, objp, FHSIZE))
+ 		 return FALSE;
+ 	return TRUE;
+@@ -53,8 +51,6 @@
+ bool_t
+ xdr_fhandle3 (XDR *xdrs, fhandle3 *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_bytes (xdrs, (char **)&objp->fhandle3_val, (u_int *) &objp->fhandle3_len, FHSIZE3))
+ 		 return FALSE;
+ 	return TRUE;
+@@ -63,8 +59,6 @@
+ bool_t
+ xdr_mountstat3 (XDR *xdrs, mountstat3 *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_enum (xdrs, (enum_t *) objp))
+ 		 return FALSE;
+ 	return TRUE;
+@@ -73,8 +67,6 @@
+ bool_t
+ xdr_fhstatus (XDR *xdrs, fhstatus *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_u_int (xdrs, &objp->fhs_status))
+ 		 return FALSE;
+ 	switch (objp->fhs_status) {
+@@ -91,8 +83,6 @@
+ bool_t
+ xdr_mountres3_ok (XDR *xdrs, mountres3_ok *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_fhandle3 (xdrs, &objp->fhandle))
+ 		 return FALSE;
+ 	 if (!xdr_array (xdrs, (char **)&objp->auth_flavours.auth_flavours_val, (u_int *) &objp->auth_flavours.auth_flavours_len, ~0,
+@@ -104,8 +94,6 @@
+ bool_t
+ xdr_mountres3 (XDR *xdrs, mountres3 *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_mountstat3 (xdrs, &objp->fhs_status))
+ 		 return FALSE;
+ 	switch (objp->fhs_status) {
+@@ -122,8 +110,6 @@
+ bool_t
+ xdr_dirpath (XDR *xdrs, dirpath *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_string (xdrs, objp, MNTPATHLEN))
+ 		 return FALSE;
+ 	return TRUE;
+@@ -132,8 +118,6 @@
+ bool_t
+ xdr_name (XDR *xdrs, name *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_string (xdrs, objp, MNTNAMLEN))
+ 		 return FALSE;
+ 	return TRUE;
+@@ -142,8 +126,6 @@
+ bool_t
+ xdr_mountlist (XDR *xdrs, mountlist *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_pointer (xdrs, (char **)objp, sizeof (struct mountbody), (xdrproc_t) xdr_mountbody))
+ 		 return FALSE;
+ 	return TRUE;
+@@ -152,8 +134,6 @@
+ bool_t
+ xdr_mountbody (XDR *xdrs, mountbody *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_name (xdrs, &objp->ml_hostname))
+ 		 return FALSE;
+ 	 if (!xdr_dirpath (xdrs, &objp->ml_directory))
+@@ -166,8 +146,6 @@
+ bool_t
+ xdr_groups (XDR *xdrs, groups *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_pointer (xdrs, (char **)objp, sizeof (struct groupnode), (xdrproc_t) xdr_groupnode))
+ 		 return FALSE;
+ 	return TRUE;
+@@ -176,8 +154,6 @@
+ bool_t
+ xdr_groupnode (XDR *xdrs, groupnode *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_name (xdrs, &objp->gr_name))
+ 		 return FALSE;
+ 	 if (!xdr_groups (xdrs, &objp->gr_next))
+@@ -188,8 +164,6 @@
+ bool_t
+ xdr_exports (XDR *xdrs, exports *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_pointer (xdrs, (char **)objp, sizeof (struct exportnode), (xdrproc_t) xdr_exportnode))
+ 		 return FALSE;
+ 	return TRUE;
+@@ -198,8 +172,6 @@
+ bool_t
+ xdr_exportnode (XDR *xdrs, exportnode *objp)
+ {
+-	register int32_t *buf;
+-
+ 	 if (!xdr_dirpath (xdrs, &objp->ex_dir))
+ 		 return FALSE;
+ 	 if (!xdr_groups (xdrs, &objp->ex_groups))
+diff -ur watchdog-5.5.orig/src/pidfile.c watchdog-5.5.cleanup/src/pidfile.c
+--- watchdog-5.5.orig/src/pidfile.c	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/src/pidfile.c	2009-03-13 10:30:08.000000000 +0000
+@@ -6,6 +6,10 @@
+ 
+ #include <errno.h>
+ #include <fcntl.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <wait.h>
++
+ #include "extern.h"
+ #include "watch_err.h"
+ 
+diff -ur watchdog-5.5.orig/src/shutdown.c watchdog-5.5.cleanup/src/shutdown.c
+--- watchdog-5.5.orig/src/shutdown.c	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/src/shutdown.c	2009-03-13 10:35:53.000000000 +0000
+@@ -4,6 +4,9 @@
+ #include "config.h"
+ #endif
+ 
++#define _XOPEN_SOURCE 500	/* for getsid(2) */
++#define _BSD_SOURCE		/* for acct(2) */
++
+ #include <dirent.h>
+ #include <errno.h>
+ #include <fcntl.h>
+@@ -18,6 +21,10 @@
+ #include <sys/mman.h>
+ #include <sys/param.h>
+ #include <sys/stat.h>
++#include <sys/types.h>
++#include <unistd.h>
++#include <time.h>
++#include <rpc/types.h>		/* for caddr_t */
+ 
+ #include "watch_err.h"
+ #include "extern.h"
+@@ -320,6 +327,7 @@
+ void do_shutdown(int errorcode)
+ {
+     int i = 0, fd;
++    size_t write_len;
+     char *seedbck = RANDOM_SEED;
+ 
+     /* soft-boot the system */
+@@ -338,7 +346,7 @@
+ 	 * We cannot let the shell check, because a non-existant or
+ 	 * non-executable sendmail binary means that the pipe is closed faster
+ 	 * than we can write to it. */
+-	if ((stat(PATH_SENDMAIL, &buf) != 0) || (buf.st_mode&S_IXUSR == 0))
++	if ((stat(PATH_SENDMAIL, &buf) != 0) || ((buf.st_mode&S_IXUSR) == 0))
+ #if USE_SYSLOG
+ 		syslog(LOG_ERR, "%s does not exist or is not executable (errno = %d)", PATH_SENDMAIL, errno);
+ #endif				/* USE_SYSLOG */
+@@ -438,7 +446,7 @@
+ 	wtmp.ut_pid = 0;
+ 	wtmp.ut_type = RUN_LVL;
+ 	wtmp.ut_time = t;
+-	write(fd, (char *) &wtmp, sizeof(wtmp));
++	write_len = write(fd, (char *) &wtmp, sizeof(wtmp));
+ 	close(fd);
+     }
+     
+@@ -454,7 +462,7 @@
+ 		char buf[512];
+ 
+ 		if (read(fd_seed, buf, 512) == 512)
+-		    write(fd_bck, buf, 512);
++		    write_len = write(fd_bck, buf, 512);
+ 		close(fd_bck);
+ 	    }
+ 	    close(fd_seed);
+diff -ur watchdog-5.5.orig/src/temp.c watchdog-5.5.cleanup/src/temp.c
+--- watchdog-5.5.orig/src/temp.c	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/src/temp.c	2009-03-13 10:36:04.000000000 +0000
+@@ -31,7 +31,7 @@
+ 	int err = errno;
+ 
+ #if USE_SYSLOG
+-	syslog(LOG_ERR, "read %s gave errno = %d = '%m'", err, tempname);
++	syslog(LOG_ERR, "read %s gave errno = %d = '%m'", tempname, err);
+ #else				/* USE_SYSLOG */
+ 	perror(progname);
+ #endif				/* USE_SYSLOG */
+diff -ur watchdog-5.5.orig/src/test_binary.c watchdog-5.5.cleanup/src/test_binary.c
+--- watchdog-5.5.orig/src/test_binary.c	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/src/test_binary.c	2009-03-13 10:36:58.000000000 +0000
+@@ -8,6 +8,8 @@
+ #include <unistd.h>
+ #include <stdlib.h>
+ #include <sys/wait.h>
++#include <time.h>
++
+ #include "extern.h"
+ #include "watch_err.h"
+ 
+@@ -76,7 +78,7 @@
+ 	    res = check_processes(timeout);
+     if (res == ETOOLONG) {
+ #if USE_SYSLOG
+-        syslog(LOG_ERR, "test-binary %s exceeded time limit %d", tbinary, timeout);
++        syslog(LOG_ERR, "test-binary %s exceeded time limit %ld", tbinary, timeout);
+ #endif				/* USE_SYSLOG */
+         return res;
+     }
+diff -ur watchdog-5.5.orig/src/watchdog.c watchdog-5.5.cleanup/src/watchdog.c
+--- watchdog-5.5.orig/src/watchdog.c	2009-02-25 11:12:59.000000000 +0000
++++ watchdog-5.5.cleanup/src/watchdog.c	2009-03-13 10:42:44.000000000 +0000
+@@ -23,6 +23,8 @@
+ #include <arpa/inet.h>
+ #include <sys/mman.h>
+ #include <sys/wait.h>
++#include <sys/stat.h>
++#include <sys/types.h>
+ #define __USE_GNU
+ #include <string.h>
+ 
+@@ -619,7 +621,7 @@
+     /* Log the starting message */
+     openlog(progname, LOG_PID, LOG_DAEMON);
+     syslog(LOG_INFO, "starting daemon (%d.%d):", MAJOR_VERSION, MINOR_VERSION);
+-    syslog(LOG_INFO, "int=%ds realtime=%s sync=%s soft=%s mla=%d mem=%ld",
++    syslog(LOG_INFO, "int=%ds realtime=%s sync=%s soft=%s mla=%d mem=%d",
+ 	    tint,
+ 	    realtime ? "yes" : "no",
+ 	    sync_it ? "yes" : "no",
+@@ -650,7 +652,7 @@
+             for (act = iface; act != NULL; act = act->next)
+                 syslog(LOG_INFO, "interface: %s", act->name);                
+ 
+-    syslog(LOG_INFO, "test=%s(%d) repair=%s alive=%s heartbeat=%s temp=%s to=%s no_act=%s",
++    syslog(LOG_INFO, "test=%s(%ld) repair=%s alive=%s heartbeat=%s temp=%s to=%s no_act=%s",
+ 	    (tbinary == NULL) ? "none" : tbinary, timeout, 
+ 	    (rbinary == NULL) ? "none" : rbinary,
+ 	    (devname == NULL) ? "none" : devname,
+@@ -692,7 +694,7 @@
+             /* Allocate  memory for keeping the timestamps in */
+             nrts = 0;
+             lastts = 0;
+-            timestamps = (unsigned char *) calloc(hbstamps, TS_SIZE);
++            timestamps = (char *) calloc(hbstamps, TS_SIZE);
+             if ( timestamps == NULL ) {
+ #if USE_SYSLOG
+                 syslog(LOG_ERR, "cannot allocate memory for timestamps (errno = %d = '%m')", errno);
+@@ -707,7 +709,8 @@
+                     memcpy(timestamps + (TS_SIZE * lastts), rbuf, TS_SIZE);
+                     if (nrts < hbstamps) 
+                         nrts++;
+-                    lastts = ++lastts % hbstamps;
++                    ++lastts;
++                    lastts = lastts % hbstamps;
+                 }
+                 /* Write an indication that the watchdog has started to the heartbeat file */
+                 /* copy it to the buffer */
+@@ -717,7 +720,8 @@
+                 // success
+                 if (nrts < hbstamps) 
+                     nrts++;
+-                lastts = ++lastts % hbstamps;
++                ++lastts;
++                lastts = lastts % hbstamps;
+ 
+             }
+         }
